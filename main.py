@@ -16,8 +16,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from src.data_loader import load_all
 from src.features import build_feature_matrix
 from src.train import run_training
-from src.predict import predict_current_season
+from src.predict import predict_current_season, predict_trajectory
 from src.report import generate_report
+from src.plot import plot_trajectory
 
 
 def main():
@@ -49,9 +50,17 @@ def main():
     if not args.no_predict:
         print(f"\n=== Predicting Season {args.season} ===")
         try:
-            results = predict_current_season(dfs, season=args.season)
+            predict_current_season(dfs, season=args.season)
         except Exception as e:
             print(f"Prediction failed: {e}")
+
+        print(f"\n=== Building trajectory for Season {args.season} ===")
+        try:
+            traj_df = predict_trajectory(dfs, season=args.season)
+            if traj_df is not None:
+                plot_trajectory(traj_df, season=args.season)
+        except Exception as e:
+            print(f"Trajectory failed: {e}")
 
 
 if __name__ == '__main__':

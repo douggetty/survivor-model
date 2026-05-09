@@ -751,11 +751,41 @@ def build_prediction_snapshots(dfs, current_season=50):
         (current['episode'] == latest_ep) & (current['game_status'] == 'In the game')
     ][['season', 'episode', 'castaway_id', 'castaway', 'final_n']].copy()
     active['won_season'] = -1  # unknown
+    return _build_episode_snapshot(active, dfs, current_season)
 
-    # Join day from tribe_mapping
+
+def build_all_episode_snapshots(dfs, current_season=50):
+    """
+    Build feature rows for ALL episodes of the current season.
+
+    Returns a DataFrame with one row per (episode, castaway_id) for players
+    who were in the game at that episode, with features computed from data
+    available up to that episode.
+    """
+    bm = _dedup_boot_map(_us(dfs['boot_mapping']))
+    current = bm[bm['season'] == current_season]
+    episodes = sorted(current['episode'].unique())
+
+    all_rows = []
+    for ep in episodes:
+        ep_active = current[
+            (current['episode'] == ep) & (current['game_status'] == 'In the game')
+        ][['season', 'episode', 'castaway_id', 'castaway', 'final_n']].copy()
+        if len(ep_active) == 0:
+            continue
+        ep_active['won_season'] = -1
+        snap = _build_episode_snapshot(ep_active, dfs, current_season)
+        all_rows.append(snap)
+
+    return pd.concat(all_rows, ignore_index=True) if all_rows else pd.DataFrame()
+
+
+def _build_episode_snapshot(active, dfs, current_season):
+    """Apply all feature groups to an already-filtered active player DataFrame."""
     tm_cur = _us(dfs['tribe_mapping'])
     tm_cur = tm_cur[tm_cur['season'] == current_season]
-    day_lookup = tm_cur[['season', 'episode', 'castaway_id', 'day']].drop_duplicates(['season', 'episode', 'castaway_id'])
+    day_lookup = (tm_cur[['season', 'episode', 'castaway_id', 'day']]
+                  .groupby(['season', 'episode', 'castaway_id'])['day'].max().reset_index())
     active = active.merge(day_lookup, on=['season', 'episode', 'castaway_id'], how='left')
     active['day'] = active['day'].fillna(active['episode'] * 3)
     max_days = tm_cur['day'].max()
