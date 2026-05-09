@@ -15,6 +15,11 @@ from scipy import stats as scipy_stats
 # helpers
 # ---------------------------------------------------------------------------
 
+# Statuses that mean a player is still competing (not eliminated).
+# 'Exile Island' players are temporarily sent away but remain in the game.
+_ACTIVE_STATUSES = {'In the game', 'Exile Island'}
+
+
 def _us(df):
     """Filter DataFrame to US version rows."""
     if 'version' in df.columns:
@@ -748,7 +753,7 @@ def build_prediction_snapshots(dfs, current_season=50):
     latest_ep = current['episode'].max()
 
     active = current[
-        (current['episode'] == latest_ep) & (current['game_status'] == 'In the game')
+        (current['episode'] == latest_ep) & current['game_status'].isin(_ACTIVE_STATUSES)
     ][['season', 'episode', 'castaway_id', 'castaway', 'final_n']].copy()
     active['won_season'] = -1  # unknown
     return _build_episode_snapshot(active, dfs, current_season)
@@ -769,7 +774,7 @@ def build_all_episode_snapshots(dfs, current_season=50):
     all_rows = []
     for ep in episodes:
         ep_active = current[
-            (current['episode'] == ep) & (current['game_status'] == 'In the game')
+            (current['episode'] == ep) & current['game_status'].isin(_ACTIVE_STATUSES)
         ][['season', 'episode', 'castaway_id', 'castaway', 'final_n']].copy()
         if len(ep_active) == 0:
             continue
