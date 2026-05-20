@@ -743,6 +743,21 @@ def build_feature_matrix(dfs, include_current_season=False):
     return df
 
 
+def _eliminated_ids(dfs, current_season):
+    """
+    Return castaway_ids officially eliminated this season per the castaways table.
+
+    boot_mapping sometimes lags behind castaways (e.g. a player voted out mid-
+    episode still shows 'In the game' in boot_mapping because the 'Voted out'
+    row was never written). Cross-referencing castaways.order catches these.
+    """
+    cast = _us(dfs['castaways'])
+    eliminated = cast[
+        (cast['season'] == current_season) & cast['order'].notna()
+    ]['castaway_id']
+    return set(eliminated.tolist())
+
+
 def build_prediction_snapshots(dfs, current_season=50):
     """
     Build feature rows for the current (in-progress) season's active players.
@@ -755,6 +770,11 @@ def build_prediction_snapshots(dfs, current_season=50):
     active = current[
         (current['episode'] == latest_ep) & current['game_status'].isin(_ACTIVE_STATUSES)
     ][['season', 'episode', 'castaway_id', 'castaway', 'final_n']].copy()
+
+    # Exclude players already recorded as eliminated in castaways
+    elim = _eliminated_ids(dfs, current_season)
+    active = active[~active['castaway_id'].isin(elim)]
+
     active['won_season'] = -1  # unknown
     return _build_episode_snapshot(active, dfs, current_season)
 
@@ -771,6 +791,15 @@ def build_all_episode_snapshots(dfs, current_season=50):
     current = bm[bm['season'] == current_season]
     episodes = sorted(current['episode'].unique())
 
+    # Build a map of castaway_id → boot episode from castaways table so we
+    # can exclude a player from episode E if they were booted on or before E.
+    cast = _us(dfs['castaways'])
+    boot_ep_map = (
+        cast[(cast['season'] == current_season) & cast['order'].notna()]
+        .set_index('castaway_id')['episode']
+        .to_dict()
+    )
+
     all_rows = []
     for ep in episodes:
         ep_active = current[
@@ -778,6 +807,14 @@ def build_all_episode_snapshots(dfs, current_season=50):
         ][['season', 'episode', 'castaway_id', 'castaway', 'final_n']].copy()
         if len(ep_active) == 0:
             continue
+
+        # Drop players whose recorded boot episode is <= ep
+        ep_active = ep_active[
+            ~ep_active['castaway_id'].map(lambda cid: boot_ep_map.get(cid, float('inf')) <= ep)
+        ]
+        if len(ep_active) == 0:
+            continue
+
         ep_active['won_season'] = -1
         snap = _build_episode_snapshot(ep_active, dfs, current_season)
         all_rows.append(snap)
