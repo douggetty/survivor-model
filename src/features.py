@@ -748,7 +748,7 @@ def build_prediction_snapshots(dfs, current_season=50):
     Build feature rows for the current (in-progress) season's active players.
     Returns the most-recent-episode snapshot for each active player.
     """
-    bm = _us(dfs['boot_mapping'])
+    bm = _dedup_boot_map(_us(dfs['boot_mapping']))
     current = bm[bm['season'] == current_season]
     latest_ep = current['episode'].max()
 
